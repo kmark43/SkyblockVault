@@ -1,6 +1,8 @@
 name: SkyblockVault
 main: git.kmark43.skyblockvault.SkyblockVaultPlugin
-version: 0.1
+version: "0.2"
+api-version: "1.13"
+author: kmark43
 
 commands:
     vault:

@@ -19,8 +19,9 @@ public class VaultCommandExecutor implements CommandExecutor {
         Vault vault = vaultManager.getPlayerVault(player);
         if (vault == null) {
             sender.sendMessage(getConfigMessage(config, "vault_not_loaded"));
+        } else {
+            vaultManager.openVault(player, vault);
         }
-        vaultManager.openVault(player, vault);
         return true;
     }
 

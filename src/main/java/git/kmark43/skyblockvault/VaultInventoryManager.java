@@ -5,6 +5,8 @@ import java.io.IOException;
 import java.util.*;
 import java.util.function.Consumer;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
+import org.bukkit.Material;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -15,13 +17,14 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 
 public class VaultInventoryManager implements Listener {
-    private Set<UUID> playersWithOpenVaults;
+    private Map<UUID, VaultInventoryGui> openVaults;
     private Map<UUID, Vault> playerVaultMap;
 
     public void enable() {
-        playersWithOpenVaults = new HashSet<>();
+        openVaults = new HashMap<>();
         playerVaultMap = new HashMap<>();
         for (Player player : Bukkit.getOnlinePlayers()) {
             loadVaultAsync(player.getUniqueId(), (vault) -> {
@@ -34,17 +37,17 @@ public class VaultInventoryManager implements Listener {
     }
 
     public void disable() {
-        for (UUID uuid : new ArrayList<>(playersWithOpenVaults)) {
+        for (UUID uuid : new ArrayList<>(openVaults.keySet())) {
             Player player = Bukkit.getPlayer(uuid);
             assert player != null;
             player.closeInventory();
         }
 
         for (UUID uuid : new ArrayList<>(playerVaultMap.keySet())) {
-            saveVault(uuid, playerVaultMap.get(uuid));
+            saveVault(playerVaultMap.get(uuid));
         }
 
-        playersWithOpenVaults = null;
+        openVaults = null;
         playerVaultMap = null;
     }
 
@@ -53,27 +56,26 @@ public class VaultInventoryManager implements Listener {
     }
 
     public void openVault(Player opener, Vault vault) {
-        Inventory inventory = vault.getInventory(opener);
-        opener.openInventory(inventory);
-        playersWithOpenVaults.add(opener.getUniqueId());
+        VaultInventoryGui gui = new VaultInventoryGui(opener, vault);
+        opener.openInventory(gui.getInventory());
+        openVaults.put(opener.getUniqueId(), gui);
     }
 
     @EventHandler
     public void onPlayerInventoryClick(InventoryClickEvent e) {
-        if (playersWithOpenVaults.contains(e.getWhoClicked().getUniqueId())) {
-            if (e.getRawSlot() >= 32 && e.getRawSlot() < 36) {
-                e.setCancelled(true);
-                // TODO doesn't prevent shift clicking barriers in to chest
-            }
-        }
+        if (!openVaults.containsKey(e.getWhoClicked().getUniqueId())) return;
+        Player player = ((Player) e.getWhoClicked());
+        openVaults.get(player.getUniqueId()).processClick(e);
     }
 
     @EventHandler
     public void onPlayerInventoryClose(InventoryCloseEvent e) {
         if (!(e.getPlayer() instanceof Player)) return;
         Player player = (Player)e.getPlayer();
-        playersWithOpenVaults.remove(player.getUniqueId());
-        getPlayerVault(player).updateContents(e.getInventory().getContents());
+        VaultInventoryGui gui = openVaults.remove(player.getUniqueId());
+        if (gui != null) {
+            gui.processClose();
+        }
     }
 
     @EventHandler
@@ -106,7 +108,7 @@ public class VaultInventoryManager implements Listener {
     private void saveVaultAsync(UUID uuid, Runnable onSuccess, Runnable onFailure) {
         Vault vault = playerVaultMap.get(uuid);
         Bukkit.getScheduler().runTaskAsynchronously(SkyblockVaultPlugin.getInstance(), () -> {
-            if (saveVault(uuid, vault)) {
+            if (saveVault(vault)) {
                 Bukkit.getScheduler().runTask(SkyblockVaultPlugin.getInstance(), onSuccess);
             } else {
                 Bukkit.getScheduler().runTask(SkyblockVaultPlugin.getInstance(), onFailure);
@@ -123,9 +125,9 @@ public class VaultInventoryManager implements Listener {
         });
     }
 
-    private boolean saveVault(UUID uuid, Vault vault) {
+    private boolean saveVault(Vault vault) {
         if (vault == null) return false;
-        File file = getVaultFile(uuid);
+        File file = getVaultFile(vault.getOwnerUUID());
         YamlConfiguration config = new YamlConfiguration();
         config.set("contents", vault.getContents());
         try {
@@ -139,13 +141,14 @@ public class VaultInventoryManager implements Listener {
 
     private Vault loadVault(UUID uuid) {
         File file = getVaultFile(uuid);
-        Vault vault = new Vault();
+        Vault vault = new Vault(uuid);
         if (file.exists()) {
             YamlConfiguration config = YamlConfiguration.loadConfiguration(file);
             @SuppressWarnings("unchecked")
             List<ItemStack> items = (List<ItemStack>)config.get("contents", new ArrayList<ItemStack>());
             assert items != null;
-            vault.updateContents(items.toArray(new ItemStack[32]));
+            int availableSlots = SkyblockVaultPlugin.getInstance().getConfig().getInt("available_slots");
+            vault.updateContents(items.toArray(new ItemStack[0]));
         }
         return vault;
     }
