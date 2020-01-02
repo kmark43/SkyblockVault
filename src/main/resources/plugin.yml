@@ -1,0 +1,12 @@
+name: SkyblockVault
+main: git.kmark43.skyblockvault.SkyblockVaultPlugin
+version: 0.1
+
+commands:
+    vault:
+        usage: /vault
+        description: Opens your vault
+        permission: skyblockvault.openvault
+permissions:
+    skyblockvault.openvault:
+        default: op

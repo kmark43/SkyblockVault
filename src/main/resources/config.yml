@@ -1,0 +1,5 @@
+vault_title: "Vault"
+available_slots: 32
+messages:
+  must_be_player: "&1Must be a player to execute this command"
+  vault_not_loaded: "&1Your vault has not been loaded"
